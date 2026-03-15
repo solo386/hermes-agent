@@ -16,28 +16,35 @@ from typing import Any, Union
 import yaml
 
 
-def atomic_json_write(path: Union[str, Path], data: Any, *, indent: int = 2) -> None:
-    """
-    Write JSON data to a file using an atomic 'replace' pattern.
+def atomic_json_write(
+    path: Union[str, Path],
+    data: Any,
+    *,
+    indent: int = 2,
+    **dump_kwargs: Any
+) -> None:
+    """Write JSON data to a file atomically using a 'replace' pattern.
 
-    This function mitigates the risk of file corruption during system crashes. 
-    By writing to a temporary file and performing an 'os.replace', the 
-    operation ensures that the target file is either fully updated or 
+    This function mitigates the risk of file corruption during system crashes.
+    By writing to a temporary file and performing an 'os.replace', the
+    operation ensures that the target file is either fully updated or
     remains in its previous valid state.
 
     Technical Safety:
     - Uses 'os.fsync' to force the OS to flush data to physical storage.
     - Uses 'os.replace' for a POSIX-compliant atomic swap.
-    
-    NOTE: While file-system atomic, this does not implement application-level 
-    file locking. Concurrent writes from multiple processes (Race Conditions) 
+
+    NOTE: While file-system atomic, this does not implement application-level
+    file locking. Concurrent writes from multiple processes (Race Conditions)
     should be managed via higher-level orchestrators.
 
     Args:
         path: Target file path (will be created or overwritten).
         data: JSON-serializable data to write.
         indent: JSON indentation (default 2).
+        **dump_kwargs: Additional keyword args forwarded to json.dump().
     """
+
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -48,7 +55,13 @@ def atomic_json_write(path: Union[str, Path], data: Any, *, indent: int = 2) -> 
     )
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=indent, ensure_ascii=False)
+            json.dump(
+                data,
+                f,
+                indent=indent,
+                ensure_ascii=False,
+                **dump_kwargs,
+            )
             f.flush()
             # Ensure the OS flushes buffers to disk before we rename
             os.fsync(f.fileno())
