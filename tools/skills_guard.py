@@ -642,32 +642,28 @@ def scan_skill(skill_path: Path, source: str = "community") -> ScanResult:
 def should_allow_install(result: ScanResult, force: bool = False) -> Tuple[bool, str]:
     """
     Determine whether a skill should be installed based on scan result and trust.
-
-    Args:
-        result: Scan result from scan_skill()
-        force: If True, override blocked policy decisions for this scan result
-
-    Returns:
-        (allowed, reason) tuple
     """
     policy = INSTALL_POLICY.get(result.trust_level, INSTALL_POLICY["community"])
     vi = VERDICT_INDEX.get(result.verdict, 2)
     decision = policy[vi]
 
+    # Priority #1: If the official policy explicitly allows it
     if decision == "allow":
         return True, f"Allowed ({result.trust_level} source, {result.verdict} verdict)"
 
+    # Priority #2: If the policy blocks, but the --force flag is provided
     if force:
+        # It's crucial to log when a safety verdict is being bypassed
         return True, (
-            f"Force-installed despite blocked {result.verdict} verdict "
-            f"({len(result.findings)} findings)"
+            f"FORCE_OVERRIDE: Installing despite {result.verdict} verdict. "
+            f"Findings: {len(result.findings)}"
         )
 
+    # Otherwise: Block installation
     return False, (
         f"Blocked ({result.trust_level} source + {result.verdict} verdict, "
         f"{len(result.findings)} findings). Use --force to override."
     )
-
 
 def format_scan_report(result: ScanResult) -> str:
     """
@@ -1038,15 +1034,16 @@ def _get_configured_model() -> str:
 
 def _resolve_trust_level(source: str) -> str:
     """Map a source identifier to a trust level."""
-    # Official optional skills shipped with the repo
-    if source.startswith("official/") or source == "official":
+    # Check for local, official, or system-provided skills
+    if source in ("official", "builtin", "local") or source.startswith("official/"):
         return "builtin"
-    # Check if source matches any trusted repo
+    
+    # Check against known trusted repositories
     for trusted in TRUSTED_REPOS:
         if source.startswith(trusted) or source == trusted:
             return "trusted"
+            
     return "community"
-
 
 def _determine_verdict(findings: List[Finding]) -> str:
     """Determine the overall verdict from a list of findings."""
@@ -1055,12 +1052,17 @@ def _determine_verdict(findings: List[Finding]) -> str:
 
     has_critical = any(f.severity == "critical" for f in findings)
     has_high = any(f.severity == "high" for f in findings)
+    has_medium = any(f.severity == "medium" for f in findings)
 
     if has_critical:
         return "dangerous"
     if has_high:
         return "caution"
-    return "caution"
+    if has_medium:
+        return "caution"
+    
+    # If only low-severity findings exist, treat the skill as safe
+    return "safe"
 
 
 def _build_summary(name: str, source: str, trust: str, verdict: str, findings: List[Finding]) -> str:
