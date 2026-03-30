@@ -100,6 +100,7 @@ from agent.trajectory import (
     convert_scratchpad_to_think, has_incomplete_scratchpad,
     save_trajectory as _save_trajectory_to_file,
 )
+from agent.mood_engine import MoodEngine
 from utils import atomic_json_write
 
 HONCHO_TOOL_NAMES = {
@@ -554,6 +555,7 @@ class AIAgent:
         """
         _install_safe_stdio()
 
+        self.mood = MoodEngine()
         self.model = model
         self.max_iterations = max_iterations
         # Shared iteration budget — parent creates, children inherit.
@@ -5424,6 +5426,12 @@ class AIAgent:
                     result_preview = function_result[:200] if len(function_result) > 200 else function_result
                     logger.warning("Tool %s returned error (%.2fs): %s", function_name, tool_duration, result_preview)
 
+                if hasattr(self, 'mood'):
+                    if is_error:
+                        self.mood.on_error()
+                    else:
+                        self.mood.on_success()
+
                 if self.verbose_logging:
                     logging.debug(f"Tool {function_name} completed in {tool_duration:.2f}s")
                     logging.debug(f"Tool result ({len(function_result)} chars): {function_result}")
@@ -5689,6 +5697,12 @@ class AIAgent:
             _is_error_result, _ = _detect_tool_failure(function_name, function_result)
             if _is_error_result:
                 logger.warning("Tool %s returned error (%.2fs): %s", function_name, tool_duration, result_preview)
+
+            if hasattr(self, 'mood'):
+                if _is_error_result:
+                    self.mood.on_error()
+                else:
+                    self.mood.on_success()
 
             if self.verbose_logging:
                 logging.debug(f"Tool {function_name} completed in {tool_duration:.2f}s")
@@ -6104,6 +6118,19 @@ class AIAgent:
         messages.append(user_msg)
         current_turn_user_idx = len(messages) - 1
         self._persist_user_message_idx = current_turn_user_idx
+
+        if hasattr(self, 'mood'):
+            text = str(user_message).lower()
+            
+            # Check length and complexity
+            if len(text) > 500 or "```" in text or "find" in text or "write" in text:
+                self.mood.on_complex_task()
+                
+            # Check positive/negative tone
+            if any(w in text for w in ["thank you", "excellent", "super", "perfect", "thanks", "great"]):
+                self.mood.on_positive_feedback()
+            elif any(w in text for w in ["not it", "doesn't work", "not working", "error", "wrong", "bad"]):
+                self.mood.on_negative_feedback()
         
         if not self.quiet_mode:
             self._safe_print(f"💬 Starting conversation: '{user_message[:60]}{'...' if len(user_message) > 60 else ''}'")
@@ -6347,6 +6374,10 @@ class AIAgent:
             # Plugin context from pre_llm_call hooks — ephemeral, not cached.
             if _plugin_turn_context:
                 effective_system = (effective_system + "\n\n" + _plugin_turn_context).strip()
+            if hasattr(self, 'mood'):
+                mood_info = self.mood.get_prompt_text()
+                if mood_info:
+                    effective_system = (effective_system + "\n\n" + mood_info).strip()
             if effective_system:
                 api_messages = [{"role": "system", "content": effective_system}] + api_messages
 
