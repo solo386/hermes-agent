@@ -355,14 +355,13 @@ Once this pattern works, you can adapt it to:
 If you want to extend this workflow, these docs pair well with it:
 
 - [Tools & Toolsets](/docs/user-guide/features/tools)
+- [Sessions](/docs/user-guide/sessions)
 - [Profiles](/docs/user-guide/profiles)
 - [Cron](/docs/user-guide/features/cron)
-- [Run Hermes Locally with Ollama — Zero API Cost](/docs/guides/local-ollama-setup)
-- [Tutorial: GitHub PR Review Agent](/docs/guides/github-pr-review-agent)
+- [Skills System](/docs/user-guide/features/skills)
 
 The main pattern is simple:
-
-- give Hermes a bounded task
-- define a concrete verification command
-- tell it when to stop
-- keep the fix loop grounded in tool output
+- Give Hermes a bounded task
+- Define a concrete verification command
+- Tell it when to stop
+- Keep the fix loop grounded in tool output
